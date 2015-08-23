@@ -20,7 +20,9 @@ public class Circletis extends ApplicationAdapter {
     private ShapeRenderer shapeRenderer;
     // data
     private Board board;
-    private int activeCircleIndex = 0;
+    private int activeCircleIndex = -1;
+    // rotation
+    private float rotationSpeed;
 
     static Vector2 addV2(Vector2 a, Vector2 b) {
         Vector2 r = new Vector2();
@@ -33,29 +35,75 @@ public class Circletis extends ApplicationAdapter {
         camera = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         camera.position.set(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2, 0);
         shapeRenderer = new ShapeRenderer();
-        board = new Board(new Vector2(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2), Gdx.graphics.getHeight() / 3.5f, 12, 24);
+        int numberOfCircles=12;
+        int numberOfSegmentsPerCircle = 24;
+        board = new Board(new Vector2(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2), Gdx.graphics.getHeight() / 3.5f, numberOfCircles, numberOfSegmentsPerCircle);
+        rotationSpeed = 5;
     }
 
     @Override
     public void render() {
-
         Gdx.gl.glClearColor(0, 0, 0.2f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
         camera.update();
+        rotate(board, rotationSpeed * Gdx.graphics.getDeltaTime());
         shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        for (int ci = 0; ci < board.circles.size(); ci++) {
+            Circle circle = board.circles.get(ci);
+            float rAvg = (circle.radius0 + circle.radius1) / 2;
+            float rNormalized = rAvg * MathUtils.PI / board.radius;
+            float rgb = MathUtils.sin(rNormalized);
+            Color color = new Color(rgb, rgb, rgb, 1);
+            for (CircleSegment sg : circle.segments) {
+                drawCircleSegment(shapeRenderer, sg, circle.origin, color);
+            }
+        }
+        shapeRenderer.end();
+    }
 
+    private void rotate(Board board, float w) {
+        for (int ci = 0; ci < board.circles.size(); ci++) {
+            Circle circle = board.circles.get(ci);
+            for (CircleSegment sg : circle.segments) {
+                float newAngle0 = sg.angle0 + w;
+                float newAngle1 = sg.angle1 + w;
+                if (newAngle0 > 360) {
+                    newAngle0 = newAngle0-360;
+                }
+                if (newAngle1 > 360) {
+                    newAngle1 = newAngle1-360;
+                }
+                assert newAngle0 >= 0;
+                assert newAngle0 <= 360;
+                assert newAngle1 >= 0;
+                assert newAngle1 <= 360;
+                sg.update(sg.radius0, sg.radius1, newAngle0, newAngle1);
+                System.out.println(String.format("{c:%d} w: %f, %s", ci, w, sg));
+            }
+        }
+        System.out.println();
+    }
+
+    private void updateAngleSpeedWithAccleration() {
         // update circle rotations ...
         if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
+            if (activeCircleIndex == -1) {
+                activeCircleIndex = 0;
+            }
             if (activeCircleIndex < board.circles.size() - 1) {
                 activeCircleIndex++;
             }
         }
         if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
+            if (activeCircleIndex == -1) {
+                activeCircleIndex = board.circles.size();
+            }
             if (activeCircleIndex > 0) {
                 activeCircleIndex--;
             }
         }
+
         for (int ci = 0; ci < board.circles.size(); ci++) {
             Circle circle = board.circles.get(ci);
             float ddBoardRotation = 0;
@@ -82,24 +130,6 @@ public class Circletis extends ApplicationAdapter {
             }
             System.out.println(circle.boardRotationOffset);
         }
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-
-        for (int ci = 0; ci < board.circles.size(); ci++) {
-            Circle circle = board.circles.get(ci);
-            Color color = Color.RED;
-            if (ci != activeCircleIndex) {
-                float rAvg = (circle.radius0 + circle.radius1) / 2;
-                float rNormalized = rAvg * MathUtils.PI / board.radius;
-                float rgb = MathUtils.sin(rNormalized);
-                color = new Color(rgb, rgb, rgb, 1);
-            }
-            for (CircleSegment sg : circle.segments) {
-                drawCircleSegment(shapeRenderer, sg, circle.origin, color);
-            }
-        }
-
-        shapeRenderer.end();
     }
 
     private void drawCircleSegment(ShapeRenderer shapeRenderer, CircleSegment sg, Vector2 origin, Color color) {
@@ -147,23 +177,16 @@ public class Circletis extends ApplicationAdapter {
             this.radius1 = radius1;
             this.angle0 = angle0;
             this.angle1 = angle1;
-            if (angle0 < 0) {
-                angle0 = 360 - (-angle0);
-            }
-            if (angle0 > 360) {
-                angle0 = angle0 - 360;
-            }
-            if (angle1 < 0) {
-                angle1 = 360 - (-angle1);
-            }
-            if (angle1 > 360) {
-                angle1 = angle1 - 360;
-            }
             // v1..v4 are relative to 0,0
-            v1 = new Vector2(radius0 * MathUtils.cosDeg(angle0), radius0 * MathUtils.sinDeg(angle0));
-            v2 = new Vector2(radius1 * MathUtils.cosDeg(angle0), radius1 * MathUtils.sinDeg(angle0));
-            v3 = new Vector2(radius1 * MathUtils.cosDeg(angle1), radius1 * MathUtils.sinDeg(angle1));
-            v4 = new Vector2(radius0 * MathUtils.cosDeg(angle1), radius0 * MathUtils.sinDeg(angle1));
+            v1 = new Vector2(this.radius0 * MathUtils.cosDeg(this.angle0), this.radius0 * MathUtils.sinDeg(this.angle0));
+            v2 = new Vector2(this.radius1 * MathUtils.cosDeg(this.angle0), this.radius1 * MathUtils.sinDeg(this.angle0));
+            v3 = new Vector2(this.radius1 * MathUtils.cosDeg(this.angle1), this.radius1 * MathUtils.sinDeg(this.angle1));
+            v4 = new Vector2(this.radius0 * MathUtils.cosDeg(this.angle1), this.radius0 * MathUtils.sinDeg(this.angle1));
+        }
+
+        @Override
+        public String toString() {
+            return String.format("angle0: %f, angle1: %f", angle0, angle1);
         }
     }
 
